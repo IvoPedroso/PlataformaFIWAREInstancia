@@ -1,0 +1,42 @@
+version: "3.5"
+services:
+# PEP Proxy for STH-Comet
+  comet-proxy:
+    image: fiware/pep-proxy:${WILMA_VERSION}
+    container_name: fiware-comet-proxy
+    hostname: comet-proxy
+    networks:
+      default:
+        ipv4_address: 172.18.1.10
+#    depends_on:
+#      - keyrock
+    deploy:
+      restart_policy:
+        condition: on-failure
+    ports:
+      - "${STH_COMET_PROXY_PORT}:${STH_COMET_PROXY_PORT}" # localhost:8666
+    expose:
+      - "${STH_COMET_PROXY_PORT}"
+    environment:
+      - PEP_PROXY_APP_HOST=sth-comet
+      - PEP_PROXY_APP_PORT=${STH_COMET_PORT}
+      - PEP_PROXY_PORT=${STH_COMET_PROXY_PORT}
+      - PEP_PROXY_IDM_HOST=keyrock
+      - PEP_PROXY_HTTPS_ENABLED=false
+      - PEP_PROXY_AUTH_ENABLED=false
+      - PEP_PROXY_IDM_SSL_ENABLED=false
+      - PEP_PROXY_IDM_PORT=${KEYROCK_PORT}
+      - PEP_PROXY_APP_ID=4589c792-98ee-4ddc-b0fe-52cc89cea176
+      - PEP_PROXY_USERNAME=${PEP_PROXY_ID}
+      - PEP_PASSWORD=${PEP_PROXY_PASSWORD}
+      - PEP_PROXY_PDP=idm
+    #  - PEP_PROXY_MAGIC_KEY=1234
+      - PEP_PROXY_PUBLIC_PATHS=/version
+    healthcheck:
+      test: curl --fail -s http://comet-proxy:${STH_COMET_PROXY_PORT}/version || exit 1
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.18.1.0/24

@@ -1,0 +1,218 @@
+version: "3.5"
+services:
+  # Orion is the context broker
+  orion:
+    image: fiware/orion:${ORION_VERSION}
+    hostname: orion
+    container_name: fiware-orion
+    depends_on:
+      - mongo-db
+    networks:
+      default:
+        ipv4_address: "${ORION_IP}"
+    expose:
+      - "${ORION_PORT}"
+    ports:
+      - "${ORION_PORT}:${ORION_PORT}" # localhost:1026
+    command: -dbhost mongo-db -corsOrigin __ALL -logLevel DEBUG
+    healthcheck:
+      test: curl --fail -s http://orion:${ORION_PORT}/version || exit 1
+      interval: 5s
+
+  # IoT-Agent is configured for the LoraWan
+  iot-agent:
+    image: ivomiguel/iotagent-lorawan:latest
+    hostname: iot-agent
+    container_name: fiware-iot-agent
+    depends_on:
+      - mongo-db
+      - orion
+    networks:
+      default:
+        ipv4_address: "${IOTA_IP}"
+    expose:
+      - "${IOTA_NORTH_PORT}"
+    ports:
+      - "${IOTA_NORTH_PORT}:${IOTA_NORTH_PORT}" # localhost:4041
+    environment:
+      - "IOTA_CB_HOST=orion"
+      - "IOTA_CB_PORT=${ORION_PORT}" # port the context broker listens on to update context
+      - "IOTA_NORTH_PORT=${IOTA_NORTH_PORT}"
+      - "IOTA_LOG_LEVEL=DEBUG" # The log level of the IoT Agent
+      - "IOTA_TIMESTAMP=true" # Supply timestamp information with each measurement
+      - "IOTA_CB_NGSI_VERSION=v2"
+      - "IOTA_REGISTRY_TYPE=mongodb"
+      - "IOTA_MONGO_HOST=mongo-db"
+      - "IOTA_MONGO_PORT=${MONGO_DB_PORT}" # The port mongoDB is listening on
+      - "IOTA_MONGO_DB=iotagent-lorawan"
+      - "IOTA_PROVIDER_URL=http://iot-agent:${IOTA_NORTH_PORT}"
+
+
+  # Cygnus is configured to persist to STH-Comet
+  cygnus:
+    image: fiware/cygnus-ngsi:${CYGNUS_VERSION}
+    hostname: cygnus
+    container_name: fiware-cygnus
+    depends_on:
+      - mongo-db
+    networks:
+      default:
+        ipv4_address: "${CYGNUS_IP}"
+    expose:
+      - "${CYGNUS_API_PORT}"
+      - "${CYGNUS_MONGO_SERVICE_PORT}"
+    ports:
+      - "${CYGNUS_MONGO_SERVICE_PORT}:${CYGNUS_MONGO_SERVICE_PORT}" # localhost:5051
+      - "${CYGNUS_API_PORT}:${CYGNUS_API_PORT}" # localhost:5080
+    environment:
+      - "CYGNUS_MONGO_SERVICE_PORT=${CYGNUS_MONGO_SERVICE_PORT}" # Port that Cygnus listens on for operational reasons
+      - "CYGNUS_MONGO_HOSTS=mongo-db:${MONGO_DB_PORT}" # Comma separated list of Mongo-DB servers which Cygnus will contact to persist historical context data
+      - "CYGNUS_SERVICE_PORT=${CYGNUS_MONGO_SERVICE_PORT}"
+      - "CYGNUS_API_PORT=${CYGNUS_API_PORT}" # Port that Cygnus listens on for operational reasons
+      - "CYGNUS_LOG_LEVEL=DEBUG" # The logging level for Cygnus
+    healthcheck:
+      test: curl --fail -s http://cygnus:${CYGNUS_API_PORT}/v1/version || exit 1
+      interval: 5s
+
+
+  # STH-Comet is persisting Short Term History to Mongo-DB
+  sth-comet:
+    image: fiware/sth-comet:${STH_COMET_VERSION}
+    hostname: sth-comet
+    container_name: fiware-sth-comet
+    depends_on:
+      - cygnus
+      - mongo-db
+    networks:
+      default:
+        ipv4_address: "${STH_COMET_IP}"
+    ports:
+      - "${STH_COMET_PORT}:${STH_COMET_PORT}" # localhost:8666
+    environment:
+      - STH_HOST=0.0.0.0
+      - STH_PORT=${STH_COMET_PORT}
+      - DB_PREFIX=sth_
+      - DB_URI=mongo-db:${MONGO_DB_PORT}
+      - LOGOPS_LEVEL=DEBUG
+    healthcheck:
+      test: curl --fail -s http://sth-comet:${STH_COMET_PORT}/version || exit 1
+      interval: 5s
+
+  # Keyrock is an Identity Management Front-End
+  keyrock:
+    image: fiware/idm:${KEYROCK_VERSION}
+    container_name: fiware-keyrock
+    hostname: keyrock
+    networks:
+      default:
+        ipv4_address: "${KEYROCK_IP}"
+    depends_on:
+      - mysql-db
+    expose:
+      - "${KEYROCK_PORT}"
+    ports:
+      - "${KEYROCK_PORT}:${KEYROCK_PORT}" # localhost:3005
+    environment:
+      - DEBUG=idm:*
+      - IDM_DB_HOST=mysql-db
+      - IDM_DB_PASS_FILE=/run/secrets/mysql_adm_pass_secret
+      - IDM_DB_USER=root
+      - IDM_HOST=http://localhost:${KEYROCK_PORT}
+      - IDM_PORT=${KEYROCK_PORT}
+      - IDM_HTTPS_ENABLED=${IDM_HTTPS_ENABLED}
+      - IDM_HTTPS_PORT=${KEYROCK_HTTPS_PORT}
+      - IDM_ADMIN_USER=admin
+      - IDM_ADMIN_EMAIL=admin@test.com
+      - IDM_ADMIN_PASS=1234
+    secrets:
+      - mysql_adm_pass_secret 
+
+
+  # Database for Orion, IotAgent, Cygnus and Comet
+  mongo-db:
+    image: mongo:${MONGO_DB_VERSION}
+    hostname: mongo-db
+    container_name: db-mongo
+    expose:
+      - "${MONGO_DB_PORT}"
+    ports:
+      - "${MONGO_DB_PORT}:${MONGO_DB_PORT}" # localhost:27017
+    command: --bind_ip_all
+    volumes:
+      - mongo-db:/data
+    healthcheck:
+      test: |
+        host=`hostname --ip-address || echo '127.0.0.1'`; 
+        mongo --quiet $host/test --eval 'quit(db.runCommand({ ping: 1 }).ok ? 0 : 2)' && echo 0 || echo 1    
+      interval: 5s  
+  
+  # Database for Keyrock
+  mysql-db:
+    restart: always
+    image: mysql:${MYSQL_DB_VERSION}
+    hostname: mysql-db
+    container_name: db-mysql
+    expose:
+      - "${MYSQL_DB_PORT}"
+    ports:
+      - "${MYSQL_DB_PORT}:${MYSQL_DB_PORT}" # localhost:3306
+    networks:
+      default:
+        ipv4_address: "${MYSQL_IP}"
+    environment:
+      - "MYSQL_ROOT_PASSWORD_FILE=/run/secrets/mysql_adm_pass_secret"
+      - "MYSQL_ROOT_HOST= 172.18.1.5" #  Allow Keyrock to access this database
+    volumes:
+      - mysql-db:/var/lib/mysql
+      - ../mysql-data:/docker-entrypoint-initdb.d/:ro
+    secrets:
+      - mysql_adm_pass_secret
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "mysql-db"]
+      timeout: 20s
+      retries: 10
+
+  # Management API for devices
+  management-api:
+    image: ivomiguel/management-api:latest
+    hostname: management-api
+    container_name: management-api
+    expose: 
+      - "${MANAGEMENT_API_PORT}"
+    ports:
+      - "${MANAGEMENT_API_PORT}:${MANAGEMENT_API_PORT}"
+    environment:
+      - "IOT_AGENT_IP=${IOTA_IP}"
+      - "IOT_AGENT_PORT=${IOTA_NORTH_PORT}"
+      - "TTNV3_MQTT_USERNAME=${TTNV3_MQTT_USERNAME}"
+      - "TTNV3_HOSTNAME=${TTNV3_HOSTNAME}"
+      - "TTNV3_APPID=${TTNV3_APPID}"
+      - "TTNV3_JOIN_EUI=${TTNV3_JOIN_EUI}"
+      - "FIWARE_SERVICE=${FIWARE_SERVICE}"
+      - "FIWARE_SERVICE_PATH=${FIWARE_SERVICE_PATH}"
+    secrets:
+      - ttn_api_key
+      - ttn_app_key
+    healthcheck:
+      test: curl --fail -s http://management-api:${MANAGEMENT_API_PORT}/api/version || exit 1
+      interval: 5s
+      
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: "${NETWORK_SETTINGS}"
+
+volumes:
+  mongo-db: ~
+  mysql-db: ~
+
+  
+secrets:
+  mysql_adm_pass_secret:
+    file: ./mysql_adm_pass.txt
+  ttn_api_key:
+    file: ./ttn_api_key.txt
+  ttn_app_key:
+    file: ./ttn_app_key.txt
+    
