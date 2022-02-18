@@ -1,0 +1,892 @@
+
+# Orion ConfigMap
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-orion
+data:
+  ORION_PORT: "1026"
+  ORION_MONGO_HOST: "mongodb-service:27017"
+  ORION_CORS_ALLOWED_ORIGIN: "__ALL"
+  ORION_MONGODB_HOST: "mongodb-service"
+  ORION_MONGODB_PORT: "27017"
+  ORION_LOG_LEVEL: "WARN"
+  ORION_HTTP_TIMEOUT: "900000"
+  ORION_NOTIF_MODE: "transient"
+  ORION_DISABLE_METRICS: "true"
+  ORION_HOST: "orion"
+
+# IoT Agent LoRaWAN ConfigMap
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-iota
+data:
+  IOTA_CB_HOST: "orion"
+  IOTA_CB_PORT: "1026"
+  IOTA_NORTH_PORT: "4041"
+  IOTA_LOG_LEVEL: "FATAL"
+  IOTA_CB_NGSI_VERSION: "v2"
+  IOTA_REGISTRY_TYPE: "mongodb"
+  IOTA_MONGO_HOST: "mongodb-service"
+  IOTA_MONGO_PORT: "27017"
+  IOTA_MONGO_DB: "iotagent-lorawan"
+  IOTA_PROVIDER_URL: "http://iot-agent:4041"
+  TEST_TO_MOSQUITTO: "true"
+  MOSQUITTO_HOST: "192.168.1.124"
+
+# Cygnus ConfigMap
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-cygnus
+data:
+  CYGNUS_MONGO_SERVICE_PORT: "5051"
+  CYGNUS_MONGO_HOSTS: "mongodb-service:27017"
+  CYGNUS_MONGODB_HOST: "mongodb-service"
+  CYGNUS_MONGODB_PORT: "27017"
+  CYGNUS_SERVICE_PORT: "5051"
+  CYGNUS_API_PORT: "5080"
+  CYGNUS_MONGO_DATA_MODEL: "dm-by-service-path"
+  CYGNUS_STH_DATA_MODEL: "dm-by-service-path"
+  CYGNUS_MONGO_BATCH_SIZE: "100"
+  CYGNUS_MONGO_BATCH_TIMEOUT: "15"
+  CYGNUS_STH_BATCH_SIZE: "100"
+  CYGNUS_STH_BATCH_TIMEOUT: "15"
+  CYGNUS_LOG_LEVEL: "WARN"
+  ORION_HOST: "orion"
+  CYGNUS_HOST: "cygnus"
+
+# STH-Comet ConfigMap
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-comet
+data:
+  STH_HOST: "0.0.0.0"
+  STH_PORT: "8666"
+  DB_PREFIX: "sth_"
+  DB_URI: "mongodb-service:27017"
+  COMET_MONGODB_HOST: "mongodb-service"
+  COMET_MONGODB_PORT: "27017"
+  LOGOPS_LEVEL: "FATAL"
+  DATA_MODEL: "collection-per-service-path"
+ 
+# MySQL Secret
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-password
+type: opaque
+stringData:
+  MYSQL_ROOT_PASSWORD: secret
+  MYSQL_ROOT_HOST: "127.0.0.1"
+
+# Keyrock Configmap
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-keyrock
+data:
+  DEBUG: "idm:*"
+  IDM_DB_HOST: "localhost"
+  IDM_DB_USER: "root"
+  IDM_HOST: "http://localhost:3005"
+  IDM_PORT: "3005"
+  IDM_HTTPS_ENABLED: "false"
+  IDM_HTTPS_PORT: "3443"
+  IDM_ADMIN_USER: "admin"
+  IDM_ADMIN_EMAIL: "admin@test.com"
+  IDM_ADMIN_PASS: "1234" # TODO Create secret
+  IDM_CORS_ENABLED: "true"
+  IDM_CORS_PREFLIGHT: "true"
+  IDM_CORS_OPTIONS_STATUS: "204"
+  IDM_CORS_ORIGIN: "*"
+  IDM_CORS_ALLOWED_HEADERS: "content-type,X-Subject-token,X-Auth-token,authorization,Accept"
+  IDM_CORS_EXPOSED_HEADERS: "X-Subject-Token"
+  IDM_CORS_METHODS: "POST, GET, OPTIONS, DELETE, PUT"
+
+# Management-API ConfigMap
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-management-api
+data:
+  MANAGEMENT_API_PORT: "8080"
+  TTNV3_MQTT_USERNAME: "ivomiguel-isel-meic-tfm@ttn"
+  TTNV3_HOSTNAME: "eu1.cloud.thethings.network"
+  TTNV3_APPID: "ivomiguel-isel-meic-tfm"
+  TTNV3_JOIN_EUI: "70B3D57ED0037FBA"
+  FIWARE_SERVICE: "iotsensor"
+  FIWARE_SERVICE_PATH: "/"
+    
+# Management-API Secret
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ttn-api-key
+type: opaque
+stringData:
+  ttn_api_key: "NNSXS.Q37T4BDE6T6FNASRQXMWUJIXOPK7UY4JIQ6EYDA.4BVMB5UDDUU5UDNTEBAAHYWA4JJ27YJ7P3SKXVJNDPGBNYT5JDOA"
+  ttn_app_key: "5EBE6CD4937849F80D405DAD2EEAB7AE"  
+
+# MongoDB StatefulSet 
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongod
+spec:
+  serviceName: mongodb-service
+  replicas: 1
+  selector:
+    matchLabels:
+      role: mongo
+  template:
+    metadata:
+      labels:
+        role: mongo
+        environment: test
+        replicaset: MainRepSet
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: mongod-container
+          image: mongo:4.4.3
+          command:
+            - "mongod"
+            - "--bind_ip_all"
+            - "--quiet"
+          resources:
+            requests:
+              cpu: 0.2
+              memory: 200Mi
+          ports:
+            - containerPort: 27017
+          volumeMounts:
+            - name: mongo-persistent-storage
+              mountPath: /data/db
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-persistent-storage
+      spec:
+        storageClassName: standard
+        accessModes: ["ReadWriteMany"]
+        resources:
+          requests:
+            storage: 2Gi
+
+# MongoDB Service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-service
+  labels:
+    name: mongo
+spec:
+  ports:
+  - nodePort: 30010
+    port: 27017
+    targetPort: 27017
+  type: NodePort
+  selector:
+    role: mongo
+
+#Orion Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orion
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orion
+  template:
+    metadata:
+      labels:
+        app: orion
+    spec:
+      containers:
+      - name: orion
+        image: fiware/orion:3.3.1
+        args: ["-corsOrigin","__ALL", "-logLevel" ,"ERROR"]
+        ports:
+        - containerPort: 1026
+        envFrom:
+          - configMapRef:
+              name: configmap-orion
+      initContainers:      
+      - name: orion-init
+        image: ivomiguel/check_service_running:2.0
+        env:
+          - name: "SERVICE_HOST"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-orion
+                key: ORION_MONGODB_HOST
+                optional: false
+          - name: "SERVICE_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-orion
+                key: ORION_MONGODB_PORT
+                optional: false
+
+#Orion Service Test Purposes
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orion
+spec:
+  selector:
+    app: orion
+  type: NodePort
+  ports:
+  - port: 1026
+    targetPort: 1026
+    nodePort: 30000
+
+# IoTAgent LoRaWAN Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iota
+spec:
+  selector:
+    matchLabels:
+      app: iota
+  template:
+    metadata:
+      labels:
+        app: iota
+    spec:
+      containers:
+      - name: iota
+        image: ivomiguel/iotagent-lorawan:latest
+        ports:
+        - containerPort: 4041
+        envFrom:
+          - configMapRef:
+              name: configmap-iota
+      initContainers:
+      - name: iota-init
+        image: ivomiguel/check_service_running:2.0
+        env:
+          - name: "SERVICE_HOST"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-iota
+                key: IOTA_MONGO_HOST
+                optional: false
+          - name: "SERVICE_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-iota
+                key: IOTA_MONGO_PORT
+                optional: false
+
+
+#IoT Agent LoRaWAN Port
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: iota
+spec:
+  selector:
+    app: iota
+  type: NodePort
+  ports:
+  - port: 4041
+    targetPort: 4041
+    nodePort: 30001
+
+# Cygnus Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cygnus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cygnus
+  template:
+    metadata:
+      labels:
+        app: cygnus
+    spec:
+      containers:
+      - name: cygnus
+#        image: fiware/cygnus-ngsi:2.9.1
+        image: fiware/cygnus-ngsi:2.14.0
+        ports:
+        - containerPort: 5051
+          name: service
+        - containerPort: 5080
+          name: api
+        envFrom:
+          - configMapRef:
+              name: configmap-cygnus
+      initContainers:
+      - name: cygnus-check-mongo-init
+        image: ivomiguel/check_service_running:2.0
+        env:
+          - name: "SERVICE_HOST"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-cygnus
+                key: CYGNUS_MONGODB_HOST
+                optional: false
+          - name: "SERVICE_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-cygnus
+                key: CYGNUS_MONGODB_PORT
+                optional: false
+      - name: cygnus-register-orion-init
+        image: ivomiguel/register_cygnus:1.0
+        env:
+          - name: "ORION_HOST"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-cygnus
+                key: ORION_HOST
+                optional: false
+          - name: "ORION_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-orion
+                key: ORION_PORT 
+                optional: false
+          - name: "CYGNUS_HOST"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-cygnus
+                key: CYGNUS_HOST
+                optional: false
+          - name: "CYGNUS_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-cygnus
+                key: CYGNUS_SERVICE_PORT
+                optional: false
+
+
+
+
+# Cygnus Service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cygnus
+spec:
+  selector:
+    app: cygnus
+  type: NodePort
+  ports:
+  - port: 5080
+    targetPort: 5080
+    nodePort: 30002
+    name: api
+  - port: 5051
+    targetPort: 5051
+    name: service
+
+# STH-Comet Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: comet
+spec:
+  selector:
+    matchLabels:
+      app: comet
+  template:
+    metadata:
+      labels:
+        app: comet
+    spec:
+      containers:
+      - name: comet
+        image: fiware/sth-comet:2.8.0
+        ports:
+        - containerPort: 8666
+        envFrom:
+          - configMapRef:
+              name: configmap-comet
+      initContainers:
+      - name: comet-init
+        image: ivomiguel/check_service_running:2.0
+        env:
+          - name: "SERVICE_HOST"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-comet
+                key: COMET_MONGODB_HOST
+                optional: false
+          - name: "SERVICE_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-comet
+                key: COMET_MONGODB_PORT
+                optional: false
+
+
+# STH-Comet Port
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: comet
+spec:
+  selector:
+    app: comet
+  type: NodePort
+  ports:
+  - port: 8666
+    targetPort: 8666
+    nodePort: 30003
+
+# StatefulSet Keyrock & MySQL
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: keyrock
+spec:
+  selector:
+    matchLabels:
+      app: keyrock
+  serviceName: "keyrock-service"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: keyrock
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: keyrock
+        image: ivomiguel/keyrock:latest
+#        image: fiware/idm:8.1.0
+        ports:
+        - name: keyrock
+          containerPort: 3005
+        envFrom:
+          - configMapRef:
+              name: configmap-keyrock
+        env:
+          - name: IDM_DB_PASS
+            valueFrom:
+              secretKeyRef:
+                name: mysql-password
+                key: MYSQL_ROOT_PASSWORD          
+      - name: mysql
+        image: mysql:5.7.21
+        ports:
+        - containerPort: 3306
+        volumeMounts:
+        - name: mysql-persistent-storage
+          mountPath: /var/lib/mysql
+        env:
+          - name: MYSQL_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: mysql-password
+                key: MYSQL_ROOT_PASSWORD
+          - name: MYSQL_ROOT_HOST
+            valueFrom:
+              secretKeyRef:
+                name: mysql-password
+                key: MYSQL_ROOT_HOST
+  volumeClaimTemplates:
+    - metadata:
+        name: mysql-persistent-storage
+      spec:
+        storageClassName: standard
+        accessModes: ["ReadWriteMany"]
+        resources:
+          requests:
+            storage: 2Gi
+
+# Keyrock Service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keyrock-service
+  labels:
+    name: keyrock
+spec:
+  ports:
+  - name: keyrock
+    nodePort: 30020
+    port: 3005
+    targetPort: 3005
+  type: NodePort
+  selector:
+    app: keyrock
+
+# Management-API Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: management-api
+spec:
+  selector:
+    matchLabels:
+      app: management-api
+  template:
+    metadata:
+      labels:
+        app: management-api
+    spec:
+      initContainers:
+      - name: management-api-init
+        image: ivomiguel/check_service_running:2.0
+        env:
+          - name: "SERVICE_HOST"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-cygnus
+                key: CYGNUS_MONGODB_HOST
+                optional: false
+          - name: "SERVICE_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-cygnus
+                key: CYGNUS_MONGODB_PORT
+                optional: false
+      containers:
+      - name: management-api
+        image: ivomiguel/management-api:2.10
+        ports:
+        - containerPort: 8080
+        envFrom:
+          - configMapRef:
+              name: configmap-management-api
+        env:
+          - name: "IOT_AGENT_IP"
+            value: "iota"
+          - name: "IOT_AGENT_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-iota
+                key: IOTA_NORTH_PORT
+                optional: false
+          - name: "MONGODB_HOST"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-iota
+                key: IOTA_MONGO_HOST
+                optional: false
+          - name: "MONGODB_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-iota
+                key: IOTA_MONGO_PORT
+                optional: false
+        volumeMounts:
+          - mountPath: "/run/secrets/management-api"
+            name: ttn-secrets
+            readOnly: true
+      volumes:
+      - name: ttn-secrets
+        secret:
+          secretName: ttn-api-key
+
+# Management-API Service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: management-api
+spec:
+  type: NodePort
+  selector:
+    app: management-api
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+    nodePort: 30083
+
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: service-pep
+  namespace: default
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: configmap-updater
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  resourceNames: [""]
+  verbs: ["create", "update" ,"patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pep-binding
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: configmap-updater
+subjects:
+- kind: ServiceAccount
+  name: service-pep
+  namespace: default
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-pep-proxy
+data:
+  PEP_PROXY_HTTPS_ENABLED: "false"
+  PEP_PROXY_AUTH_ENABLED: "false"
+  PEP_PROXY_IDM_SSL_ENABLED: "false"
+  PEP_PROXY_PDP: "idm"
+  PEP_PROXY_MAGIC_KEY: "1234"
+#  PEP_PROXY_CORS_ORIGIN: "*"
+  PEP_PROXY_CORS_METHODS: GET,HEAD,PUT,PATCH,POST,DELETE
+#  PEP_PROXY_CORS_ALLOWED_HEADERS: "content-type,X-Auth-Token,Tenant-ID,Authorization,Fiware-Service,Fiware-ServicePath,NGSILD-Tenant,NGSILD-Path,fiware-service"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pep-proxys-webapp
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: pep-proxys-webapp
+  template:
+    metadata:
+      labels:
+        app: pep-proxys-webapp
+    spec:
+      serviceAccountName: service-pep
+      containers:
+      - name: pep-orion
+        image: fiware/pep-proxy:8.1.0
+
+        ports:
+        - containerPort: 1027
+        envFrom:
+          - configMapRef:
+              name: configmap-pep-proxy
+        env:
+          - name: "PEP_PROXY_APP_HOST"
+            value: "orion"
+          - name: "PEP_PROXY_APP_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-orion
+                key: ORION_PORT
+          - name: "PEP_PROXY_PORT"
+            value: "1027"
+          - name: "PEP_PROXY_IDM_HOST"
+            value: "keyrock-service"
+          - name: "PEP_PROXY_IDM_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-keyrock
+                key: IDM_PORT
+          - name: "PEP_PROXY_APP_ID"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-keyrock-tokens
+                key: PEP_PROXY_APP_ID
+          - name: "PEP_PROXY_USERNAME"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-keyrock-tokens
+                key: PEP_PROXY_ID
+          - name: "PEP_PASSWORD"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-keyrock-tokens
+                key: PEP_PROXY_PASSWORD
+      initContainers:
+      - name: pep-init
+        image: ivomiguel/check_service_running:2.0
+        env:
+          - name: "SERVICE_HOST"
+            value: "keyrock-service"
+          - name: "SERVICE_PORT"
+            value: "3005"
+      - name: testapi
+        image: ivomiguel/generate_token_launch_pep_proxy:1.21.10
+        env:
+          - name: "KEYROCK_HOST"
+            value: "keyrock-service"
+          - name: "KEYROCK_PORT"
+            value: "3005"
+          - name: "ADMIN_USERNAME"
+            value: "admin@test.com"
+          - name: "ADMIN_PASSWORD"
+            value: "1234"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pep-proxys-webapp
+spec:
+  selector:
+    app: pep-proxys-webapp
+  type: NodePort
+  ports:
+  - port: 1027
+    targetPort: 1027
+    nodePort: 30027
+
+# Dashboard-Web ConfigMap
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-dashboard-web
+data:
+  PORT: "80"
+  ADMIN_ROLE_NAME: "AdminRole"
+  DEVICE_TYPE: "LoraDevice"
+  CLUSTER_HOST: "10.62.73.30"
+  ORION_SERVICE_PORT: "30027"
+  KEYROCK_SERVICE_PORT: "30020"
+  COMET_SERVICE_PORT: "30003"
+  MANAGEMENT_API_SERVICE_PORT: "30083"
+  
+# Dashboard-Web Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashboard-web
+spec:
+  selector:
+    matchLabels:
+      app: dashboard-web
+  template:
+    metadata:
+      labels:
+        app: dashboard-web
+    spec:
+      containers:
+      - name: dashboard-web
+        image: ivomiguel/web-app:2.5.10
+        ports:
+        - containerPort: 80
+        envFrom:
+          - configMapRef:
+              name: configmap-dashboard-web
+          - configMapRef:
+              name: configmap-keyrock-tokens
+        env:
+          - name: "MANAGEMENT_API_IP"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-dashboard-web
+                key: CLUSTER_HOST
+                optional: false
+          - name: "MANAGEMENT_API_Port"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-dashboard-web
+                key: MANAGEMENT_API_SERVICE_PORT
+                optional: false
+          - name: "KEYROCK_IP"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-dashboard-web
+                key: CLUSTER_HOST
+                optional: false
+          - name: "KEYROCK_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-dashboard-web
+                key: KEYROCK_SERVICE_PORT
+                optional: false
+          - name: "ORION_IP"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-dashboard-web
+                key: CLUSTER_HOST
+                optional: false
+          - name: "ORION_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-dashboard-web
+                key: ORION_SERVICE_PORT
+                optional: false
+          - name: "STH_IP"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-dashboard-web
+                key: CLUSTER_HOST
+                optional: false
+          - name: "STH_PORT"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-dashboard-web
+                key: COMET_SERVICE_PORT
+                optional: false
+          - name: "FIWARE_SERVICE"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-management-api
+                key: FIWARE_SERVICE
+                optional: false
+          - name: "FIWARE_SERVICE_PATH"
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-management-api
+                key: FIWARE_SERVICE_PATH
+                optional: false
+
+# Management-API Service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dashboard-web
+spec:
+  type: NodePort
+  selector:
+    app: dashboard-web
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+    nodePort: 30080
+
+
